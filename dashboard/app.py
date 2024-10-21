@@ -35,16 +35,13 @@ with tabs[0]:
     open_order = st.sidebar.file_uploader("Upload Open Order CSV file", type=['csv'])
     trailer_activity = st.sidebar.file_uploader("Upload Trailer Activity CSV file", type=['csv'])
 
-    if open_dock is None or open_order is None or trailer_activity is None:
-        st.info("Please upload all three files through the sidebar")
-        st.stop()
+    if open_dock is not None and open_order is not None and trailer_activity is not None:
+        # Load the data
+        od_df = load_data(open_dock)
+        oo_df = load_data(open_order)
+        ta_df = load_data(trailer_activity)
 
-    od_df = load_data(open_dock)
-    oo_df = load_data(open_order)
-    ta_df = load_data(trailer_activity)
-
-    # Create button to clean and merge data sets.
-    if st.sidebar.button('Clean and merge the selected CSV files.'):
+        # Clean and merge data sets immediately after all files are uploaded
         cleaned_open_dock = clean_open_dock(od_df)
         cleaned_open_order = clean_open_order(oo_df)
         cleaned_trailer_activity = clean_trailer_activity(ta_df)
@@ -113,13 +110,22 @@ with tabs[0]:
             st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
 
     with st.expander('Preview Open Dock CSV'):
-        st.write(od_df.head())
+        if open_dock is not None:
+            st.write(od_df.head())
+        else:
+            st.info("Open Dock CSV not uploaded yet.")
 
     with st.expander('Preview Open Order CSV'):
-        st.write(oo_df.head())
+        if open_order is not None:
+            st.write(oo_df.head())
+        else:
+            st.info("Open Order CSV not uploaded yet.")
 
     with st.expander('Preview Trailer Activity CSV'):
-        st.write(ta_df.head())
+        if trailer_activity is not None:
+            st.write(ta_df.head())
+        else:
+            st.info("Trailer Activity CSV not uploaded yet.")
 
 with tabs[1]:
     st.header("Cleaned Data")
