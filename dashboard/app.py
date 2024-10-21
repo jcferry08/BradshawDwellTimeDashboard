@@ -874,210 +874,212 @@ with tabs[4]:
 with tabs[5]:
     st.header("Yearly Dashboard")
     st.write("YTD Dashboard")
+    if not st.session_state['dwell_and_ontime_compliance'].empty:
+        ytd_df = st.session_state['dwell_and_ontime_compliance']
 
-    ytd_df = st.session_state['dwell_and_ontime_compliance']
+        # Create two columns for layout
+        col1, col2 = st.columns([1, 1])
 
-    # Create two columns for layout
-    col1, col2 = st.columns([1, 1])
+        # Pivot: On Time Compliance by Week (left column)
+        with col1:
+            with st.expander('YTD On Time Compliance'):
+                compliance_pivot = ytd_df.pivot_table(
+                    values='Shipment ID', 
+                    columns='Compliance',
+                    aggfunc='count',
+                    fill_value=0
+                ).reset_index(drop=True)
+                compliance_pivot['Grand Total'] = compliance_pivot.select_dtypes(include=[np.number]).sum(axis=1)
+                compliance_pivot['On Time %'] = round((compliance_pivot.get('On Time', 0) / compliance_pivot['Grand Total']) * 100, 2)
+                compliance_pivot.style.format({'On Time %': lambda x: '{:.2f}%'.format(x).rstrip('0').rstrip('.')})
+                st.subheader('YTD On Time Compliance')
+                st.table(compliance_pivot)
 
-    # Pivot: On Time Compliance by Week (left column)
-    with col1:
-        with st.expander('YTD On Time Compliance'):
-            compliance_pivot = ytd_df.pivot_table(
-                values='Shipment ID', 
-                columns='Compliance',
-                aggfunc='count',
-                fill_value=0
-            ).reset_index(drop=True)
-            compliance_pivot['Grand Total'] = compliance_pivot.select_dtypes(include=[np.number]).sum(axis=1)
-            compliance_pivot['On Time %'] = round((compliance_pivot.get('On Time', 0) / compliance_pivot['Grand Total']) * 100, 2)
-            compliance_pivot.style.format({'On Time %': lambda x: '{:.2f}%'.format(x).rstrip('0').rstrip('.')})
-            st.subheader('YTD On Time Compliance')
-            st.table(compliance_pivot)
-
-        # Add Line Chart for Compliance Trend (using the last day of each month for data points)
-        trend_data = ytd_df.groupby(['Scheduled Date', 'Compliance']).size().unstack(fill_value=0).reset_index()
-        trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
-        trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
-        
-
-        # Create line chart
-        fig = go.Figure()
-
-        # Add 'On Time' line to the chart
-        if 'On Time' in trend_data.columns:
-            fig.add_trace(go.Scatter(
-                x=trend_data['Scheduled Date'], 
-                y=trend_data['On Time'], 
-                mode='lines+markers',
-                name='On Time',
-                line=dict(color='green')
-            ))
-
-        # Add 'Late' line to the chart
-        if 'Late' in trend_data.columns:
-            fig.add_trace(go.Scatter(
-                x=trend_data['Scheduled Date'], 
-                y=trend_data['Late'], 
-                mode='lines+markers',
-                name='Late',
-                line=dict(color='red')
-            ))
-
-        fig.update_layout(
-            title='Compliance Trend Over the Year',
-            xaxis_title='Scheduled Date',
-            yaxis_title='Number of Shipments',
-            xaxis=dict(type='category'),
-            template='plotly_white'
-        )
-
-        st.plotly_chart(fig, use_container_width=True, key="ytd_line_chart")
-
-    # Weekly Count by Dwell Time (right column)
-    with col1:
-        with st.expander('Weekly Count by Dwell Time'):
-            if 'Dwell Time' in ytd_df.columns:
-                ytd_df['Dwell Time Category'] = pd.cut(
-                    ytd_df['Dwell Time'],
-                    bins=[0, 2, 3, 4, 5, np.inf],
-                    labels=['less than 2 hours', '2 to 3 hours', '3 to 4 hours', '4 to 5 hours', '5 or more hours']
-                )
-            else:
-                st.error("'Dwell Time' column is missing from the dataset.")
-
-            dwell_count_pivot = ytd_df.pivot_table(
-                values='Shipment ID',
-                index='Dwell Time Category',
-                columns='Compliance',
-                aggfunc='count',
-                fill_value=0
-            ).reset_index()
-            dwell_count_pivot['Grand Total'] = dwell_count_pivot.select_dtypes(include=[np.number]).sum(axis=1)
-            dwell_count_pivot['Late % of Total'] = round((dwell_count_pivot.get('Late', 0) / dwell_count_pivot['Grand Total']) * 100, 2)
-            dwell_count_pivot['On Time % of Total'] = round((dwell_count_pivot.get('On Time', 0) / dwell_count_pivot['Grand Total']) * 100, 2)
+            # Add Line Chart for Compliance Trend (using the last day of each month for data points)
+            trend_data = ytd_df.groupby(['Scheduled Date', 'Compliance']).size().unstack(fill_value=0).reset_index()
+            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
+            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
             
-            st.subheader('Weekly Count by Dwell Time')
-            st.table(dwell_count_pivot)
 
-        categories = dwell_count_pivot['Dwell Time Category']
-        late_percentages = dwell_count_pivot['Late % of Total']
-        on_time_percentages = dwell_count_pivot['On Time % of Total']
-        
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=categories,
-            y=on_time_percentages,
-            name='On Time',
-            marker_color='green',
-            text=on_time_percentages,
-            textposition='inside'
-        ))
-        fig.add_trace(go.Bar(
-            x=categories,
-            y=late_percentages,
-            name='Late',
-            marker_color='red',
-            text=late_percentages,
-            textposition='inside'
-        ))
-        fig.update_layout(
-            barmode='stack',
-            title='100% Stacked Bar Chart: Late vs On Time by Dwell Time Category',
-            xaxis_title='Dwell Time Category',
-            yaxis_title='% of Total Shipments',
-            legend_title='Compliance',
-            xaxis_tickangle=-45
-        )
-        st.plotly_chart(fig, use_container_width=True, key="ytd_100%_stacked")
+            # Create line chart
+            fig = go.Figure()
 
-    # Average Dwell Time by Visit Type (right column)
-    with col1:
-        with st.expander('Average Dwell Time by Visit Type'):
-            dwell_average_pivot = ytd_df.pivot_table(
-                values='Dwell Time',
-                index='Visit Type',
-                columns='Compliance',
-                aggfunc='mean',
-                fill_value=np.nan
-            ).reset_index()
+            # Add 'On Time' line to the chart
+            if 'On Time' in trend_data.columns:
+                fig.add_trace(go.Scatter(
+                    x=trend_data['Scheduled Date'], 
+                    y=trend_data['On Time'], 
+                    mode='lines+markers',
+                    name='On Time',
+                    line=dict(color='green')
+                ))
 
-            dwell_average_pivot['Grand Average'] = dwell_average_pivot.select_dtypes(include=[np.number]).mean(axis=1)
+            # Add 'Late' line to the chart
+            if 'Late' in trend_data.columns:
+                fig.add_trace(go.Scatter(
+                    x=trend_data['Scheduled Date'], 
+                    y=trend_data['Late'], 
+                    mode='lines+markers',
+                    name='Late',
+                    line=dict(color='red')
+                ))
 
-            grand_avg_row = dwell_average_pivot.select_dtypes(include=[np.number]).mean().to_frame().T
-            grand_avg_row['Visit Type'] = 'Grand Average'
-            dwell_average_pivot = pd.concat([dwell_average_pivot, grand_avg_row], ignore_index=True)
+            fig.update_layout(
+                title='Compliance Trend Over the Year',
+                xaxis_title='Scheduled Date',
+                yaxis_title='Number of Shipments',
+                xaxis=dict(type='category'),
+                template='plotly_white'
+            )
 
-            st.subheader('Average Dwell Time by Visit Type')
-            st.table(dwell_average_pivot)
+            st.plotly_chart(fig, use_container_width=True, key="ytd_line_chart")
 
-        if 'Late' in dwell_average_pivot.columns and 'On Time' in dwell_average_pivot.columns:
+        # Weekly Count by Dwell Time (right column)
+        with col1:
+            with st.expander('Weekly Count by Dwell Time'):
+                if 'Dwell Time' in ytd_df.columns:
+                    ytd_df['Dwell Time Category'] = pd.cut(
+                        ytd_df['Dwell Time'],
+                        bins=[0, 2, 3, 4, 5, np.inf],
+                        labels=['less than 2 hours', '2 to 3 hours', '3 to 4 hours', '4 to 5 hours', '5 or more hours']
+                    )
+                else:
+                    st.error("'Dwell Time' column is missing from the dataset.")
+
+                dwell_count_pivot = ytd_df.pivot_table(
+                    values='Shipment ID',
+                    index='Dwell Time Category',
+                    columns='Compliance',
+                    aggfunc='count',
+                    fill_value=0
+                ).reset_index()
+                dwell_count_pivot['Grand Total'] = dwell_count_pivot.select_dtypes(include=[np.number]).sum(axis=1)
+                dwell_count_pivot['Late % of Total'] = round((dwell_count_pivot.get('Late', 0) / dwell_count_pivot['Grand Total']) * 100, 2)
+                dwell_count_pivot['On Time % of Total'] = round((dwell_count_pivot.get('On Time', 0) / dwell_count_pivot['Grand Total']) * 100, 2)
+                
+                st.subheader('Weekly Count by Dwell Time')
+                st.table(dwell_count_pivot)
+
+            categories = dwell_count_pivot['Dwell Time Category']
+            late_percentages = dwell_count_pivot['Late % of Total']
+            on_time_percentages = dwell_count_pivot['On Time % of Total']
+            
             fig = go.Figure()
             fig.add_trace(go.Bar(
-                x=dwell_average_pivot['Visit Type'],
-                y=dwell_average_pivot['Late'],
-                name='Late',
-                marker=dict(color='rgba(255, 0, 0, 0.7)'),
-                text=[f'{val:.1f}%' for val in dwell_average_pivot['Late']],
-                textposition='auto',
-                textfont=dict(color='white')
+                x=categories,
+                y=on_time_percentages,
+                name='On Time',
+                marker_color='green',
+                text=on_time_percentages,
+                textposition='inside'
             ))
             fig.add_trace(go.Bar(
-                x=dwell_average_pivot['Visit Type'],
-                y=dwell_average_pivot['On Time'],
-                name='On Time',
-                marker=dict(color='rgba(0, 128, 0, 0.7)'),
-                text=[f'{val:.1f}%' for val in dwell_average_pivot['On Time']],
-                textposition='auto',
-                textfont=dict(color='white')
+                x=categories,
+                y=late_percentages,
+                name='Late',
+                marker_color='red',
+                text=late_percentages,
+                textposition='inside'
             ))
             fig.update_layout(
-                title='Average Dwell Time by Visit Type and Compliance',
-                xaxis_title='Visit Type',
-                yaxis_title='Average Dwell Time',
-                barmode='group',
-                xaxis_tickangle=-45,
+                barmode='stack',
+                title='100% Stacked Bar Chart: Late vs On Time by Dwell Time Category',
+                xaxis_title='Dwell Time Category',
+                yaxis_title='% of Total Shipments',
                 legend_title='Compliance',
-                height=500,
-                width=800
+                xaxis_tickangle=-45
             )
-            st.plotly_chart(fig, use_container_width=True, key="ytd_grouped_bar")
+            st.plotly_chart(fig, use_container_width=True, key="ytd_100%_stacked")
 
-    # Pivot: On Time Compliance by Carrier (right column)
-    with col2:
-        with st.expander('On Time Compliance by Carrier'):
-            carrier_pivot = ytd_df.pivot_table(
-                values='Shipment ID',
-                index='Carrier',
-                columns='Compliance',
-                aggfunc='count',
-                fill_value=0
-            ).reset_index()
-            
-            carrier_pivot['Grand Total'] = carrier_pivot.select_dtypes(include=[np.number]).sum(axis=1)
-            carrier_pivot['On Time %'] = round((carrier_pivot.get('On Time', 0) / carrier_pivot['Grand Total']) * 100, 2)
-            carrier_pivot = carrier_pivot.sort_values(by='On Time %', ascending=False)
-            
-            st.subheader('On Time Compliance by Carrier')
-            st.table(carrier_pivot)
+        # Average Dwell Time by Visit Type (right column)
+        with col1:
+            with st.expander('Average Dwell Time by Visit Type'):
+                dwell_average_pivot = ytd_df.pivot_table(
+                    values='Dwell Time',
+                    index='Visit Type',
+                    columns='Compliance',
+                    aggfunc='mean',
+                    fill_value=np.nan
+                ).reset_index()
 
-        # Heat map for On Time Compliance by Carrier
-        heatmap_data = carrier_pivot.set_index('Carrier')[['On Time %']]
-        fig = go.Figure(data=go.Heatmap(
-            z=heatmap_data['On Time %'].values.reshape(-1, 1),
-            x=['On Time %'],
-            y=heatmap_data.index,
-            colorscale='RdYlGn',
-            colorbar=dict(title="On Time %"),
-            text=heatmap_data['On Time %'].values.reshape(-1, 1),
-            texttemplate="%{text:.2f}%",
-            showscale=True
-        ))
-        fig.update_layout(
-            title='On Time Compliance Percentage by Carrier',
-            xaxis_title='',
-            yaxis_title='Carrier',
-            yaxis_autorange='reversed',
-            height=len(heatmap_data) * 40 + 100
-        )
-        st.plotly_chart(fig, use_container_width=True, key="ytd_heatmap")
+                dwell_average_pivot['Grand Average'] = dwell_average_pivot.select_dtypes(include=[np.number]).mean(axis=1)
+
+                grand_avg_row = dwell_average_pivot.select_dtypes(include=[np.number]).mean().to_frame().T
+                grand_avg_row['Visit Type'] = 'Grand Average'
+                dwell_average_pivot = pd.concat([dwell_average_pivot, grand_avg_row], ignore_index=True)
+
+                st.subheader('Average Dwell Time by Visit Type')
+                st.table(dwell_average_pivot)
+
+            if 'Late' in dwell_average_pivot.columns and 'On Time' in dwell_average_pivot.columns:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=dwell_average_pivot['Visit Type'],
+                    y=dwell_average_pivot['Late'],
+                    name='Late',
+                    marker=dict(color='rgba(255, 0, 0, 0.7)'),
+                    text=[f'{val:.1f}%' for val in dwell_average_pivot['Late']],
+                    textposition='auto',
+                    textfont=dict(color='white')
+                ))
+                fig.add_trace(go.Bar(
+                    x=dwell_average_pivot['Visit Type'],
+                    y=dwell_average_pivot['On Time'],
+                    name='On Time',
+                    marker=dict(color='rgba(0, 128, 0, 0.7)'),
+                    text=[f'{val:.1f}%' for val in dwell_average_pivot['On Time']],
+                    textposition='auto',
+                    textfont=dict(color='white')
+                ))
+                fig.update_layout(
+                    title='Average Dwell Time by Visit Type and Compliance',
+                    xaxis_title='Visit Type',
+                    yaxis_title='Average Dwell Time',
+                    barmode='group',
+                    xaxis_tickangle=-45,
+                    legend_title='Compliance',
+                    height=500,
+                    width=800
+                )
+                st.plotly_chart(fig, use_container_width=True, key="ytd_grouped_bar")
+
+        # Pivot: On Time Compliance by Carrier (right column)
+        with col2:
+            with st.expander('On Time Compliance by Carrier'):
+                carrier_pivot = ytd_df.pivot_table(
+                    values='Shipment ID',
+                    index='Carrier',
+                    columns='Compliance',
+                    aggfunc='count',
+                    fill_value=0
+                ).reset_index()
+                
+                carrier_pivot['Grand Total'] = carrier_pivot.select_dtypes(include=[np.number]).sum(axis=1)
+                carrier_pivot['On Time %'] = round((carrier_pivot.get('On Time', 0) / carrier_pivot['Grand Total']) * 100, 2)
+                carrier_pivot = carrier_pivot.sort_values(by='On Time %', ascending=False)
+                
+                st.subheader('On Time Compliance by Carrier')
+                st.table(carrier_pivot)
+
+            # Heat map for On Time Compliance by Carrier
+            heatmap_data = carrier_pivot.set_index('Carrier')[['On Time %']]
+            fig = go.Figure(data=go.Heatmap(
+                z=heatmap_data['On Time %'].values.reshape(-1, 1),
+                x=['On Time %'],
+                y=heatmap_data.index,
+                colorscale='RdYlGn',
+                colorbar=dict(title="On Time %"),
+                text=heatmap_data['On Time %'].values.reshape(-1, 1),
+                texttemplate="%{text:.2f}%",
+                showscale=True
+            ))
+            fig.update_layout(
+                title='On Time Compliance Percentage by Carrier',
+                xaxis_title='',
+                yaxis_title='Carrier',
+                yaxis_autorange='reversed',
+                height=len(heatmap_data) * 40 + 100
+            )
+            st.plotly_chart(fig, use_container_width=True, key="ytd_heatmap")
+    else:
+        st.error("No data available for the selected date range.")
