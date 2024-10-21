@@ -78,6 +78,7 @@ with tabs[0]:
                 merged_df['SO Number'] = merged_df['SO Number'].astype('object')
 
                 # Query to merge with trailer report
+            if merged_df is not None:
                 dwell_and_ontime_compliance = con.execute("""
                     SELECT 
                         trailer_report."Shipment ID",
@@ -95,7 +96,7 @@ with tabs[0]:
                         trailer_report.Week,
                         trailer_report.Month
                     FROM trailer_report
-                    LEFT JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
+                    INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
                 """).fetchdf()
 
                 # Ensure required columns exist and handle missing values
