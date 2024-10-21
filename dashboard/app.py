@@ -178,9 +178,6 @@ with tabs[2]:
             if filtered_df.empty:
                 st.warning(f"No data found for the selected date: {selected_date_str}")
             else:
-                st.write("Filtered Data:")
-                st.write(filtered_df)
-
                 # Creating layout for the graphs
                 col1, col2 = st.columns([1, 1])
 
@@ -356,9 +353,6 @@ with tabs[3]:
             if filtered_df.empty:
                 st.warning(f"No data found for the selected week: {selected_week}")
             else:
-                st.write("Filtered Data:")
-                st.write(filtered_df)
-
                 # Create two columns for layout
                 col1, col2 = st.columns([1, 1])  # Column 1 is wider than Column 2
                 # Pivot: On Time Compliance by Week (left column)
@@ -619,9 +613,6 @@ with tabs[4]:
         if filtered_df.empty:
             st.warning(f"No data found for the selected month: {selected_month}")
         else:
-            st.write("Filtered Data:")
-            st.write(filtered_df)
-
             # Create two columns for layout
             col1, col2 = st.columns([1, 1])
             
@@ -876,7 +867,7 @@ with tabs[5]:
     st.write("YTD Dashboard")
     if not st.session_state['dwell_and_ontime_compliance'].empty:
         ytd_df = st.session_state['dwell_and_ontime_compliance']
-
+        
         # Create two columns for layout
         col1, col2 = st.columns([1, 1])
 
