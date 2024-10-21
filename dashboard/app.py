@@ -110,6 +110,9 @@ with tabs[0]:
                 if 'Scheduled Date' in dwell_and_ontime_compliance.columns:
                     dwell_and_ontime_compliance['Scheduled Date'] = pd.to_datetime(dwell_and_ontime_compliance['Scheduled Date'], errors='coerce').dt.strftime("%m-%d-%Y")
 
+                # Drop rows with missing critical values to avoid KeyErrors
+                dwell_and_ontime_compliance.dropna(subset=['Shipment ID', 'Scheduled Date', 'Loaded DateTime'], inplace=True)
+
                 # Store the result in session state
                 st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
 
@@ -157,6 +160,7 @@ with tabs[1]:
             file_name='Bradshaw_Dwell_and_OnTime_Compliance.csv',
             mime='text/csv'
         )
+
 
 with tabs[2]:
     st.header("Daily Dashboard")
