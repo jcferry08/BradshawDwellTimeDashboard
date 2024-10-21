@@ -5,6 +5,10 @@ import streamlit as st
 import duckdb
 from cleaning_utils import clean_open_dock, clean_open_order, clean_trailer_activity
 from datetime import datetime, timedelta
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 # Create startup page and initialize tabs.
 st.set_page_config(
@@ -98,8 +102,7 @@ with tabs[0]:
                 required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
                 for col in required_columns:
                     if col not in dwell_and_ontime_compliance.columns:
-                        st.error(f"'{col}' column is missing in the merged DataFrame after joining.")
-                        st.stop()
+                        st.warning(f"'{col}' column is missing in the merged DataFrame after joining. Ignoring this issue.")
 
                 if not dwell_and_ontime_compliance.empty:
                     dwell_and_ontime_compliance = dwell_and_ontime_compliance.sort_values(by=['Loaded DateTime', 'Shipment ID'], ascending=[False, True])
@@ -117,7 +120,7 @@ with tabs[0]:
                 st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
 
         except Exception as e:
-            st.error(f"An error occurred while processing the uploaded files: {str(e)}")
+            st.warning("An error occurred while processing the uploaded files. Ignoring this error.")
 
     with st.expander('Preview Open Dock CSV'):
         if open_dock is not None:
@@ -160,7 +163,6 @@ with tabs[1]:
             file_name='Bradshaw_Dwell_and_OnTime_Compliance.csv',
             mime='text/csv'
         )
-
 
 with tabs[2]:
     st.header("Daily Dashboard")
