@@ -609,7 +609,7 @@ with tabs[3]:
 
 with tabs[4]:
     st.header("Monthly Dashboard")
-    selected_month = st.number_input("Select Month Number for Weekly Report:", min_value=1, max_value=12)
+    selected_month = st.number_input("Select Month Number for Monthly Report:", min_value=1, max_value=12)
 
     st.write(f"Selected Month for filtering: {selected_month}")
 
