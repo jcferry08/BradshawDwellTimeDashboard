@@ -123,19 +123,19 @@ with tabs[0]:
             st.warning("An error occurred while processing the uploaded files. Ignoring this error.")
 
     with st.expander('Preview Open Dock CSV'):
-        if open_dock is not None:
+        if open_dock is not None and 'od_df' in locals():
             st.write(od_df.head())
         else:
             st.info("Open Dock CSV not uploaded yet.")
 
     with st.expander('Preview Open Order CSV'):
-        if open_order is not None:
+        if open_order is not None and 'oo_df' in locals():
             st.write(oo_df.head())
         else:
             st.info("Open Order CSV not uploaded yet.")
 
     with st.expander('Preview Trailer Activity CSV'):
-        if trailer_activity is not None:
+        if trailer_activity is not None and 'ta_df' in locals():
             st.write(ta_df.head())
         else:
             st.info("Trailer Activity CSV not uploaded yet.")
