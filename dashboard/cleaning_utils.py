@@ -37,9 +37,7 @@ def clean_open_dock(od_df):
     return od_df
 
 def clean_open_order(oo_df):
-    # Clean the Open Order CSV file
 
-    # Keep only necessary columns
     columns_to_keep = ['Appt Date and Time', 'SO #', 'Shipment Nbr', 'Order Status']
     oo_df = oo_df.drop(columns=oo_df.columns.difference(columns_to_keep))
 

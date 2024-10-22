@@ -58,6 +58,14 @@ with tabs[0]:
                 cleaned_open_order = clean_open_order(oo_df)
                 cleaned_trailer_activity = clean_trailer_activity(ta_df)
 
+                # Ensure "SO Number" columns are treated as strings to prevent conversion issues
+                cleaned_open_dock['SO Number'] = cleaned_open_dock['SO Number'].astype(str)
+                cleaned_open_order['SO Number'] = cleaned_open_order['SO Number'].astype(str)
+
+                # Handle concatenated "SO Number" values by splitting them into separate rows
+                cleaned_open_dock = cleaned_open_dock.assign(**{'SO Number': cleaned_open_dock['SO Number'].str.split(',')}).explode('SO Number')
+                cleaned_open_order = cleaned_open_order.assign(**{'SO Number': cleaned_open_order['SO Number'].str.split(',')}).explode('SO Number')
+
                 st.write("Cleaned Open Dock Data:", cleaned_open_dock.head())
                 st.write("Cleaned Open Order Data:", cleaned_open_order.head())
                 st.write("Cleaned Trailer Activity Data:", cleaned_trailer_activity.head())
