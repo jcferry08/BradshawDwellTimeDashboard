@@ -6,31 +6,33 @@ def clean_open_dock(od_df):
 
     # Cleaning the 'Reference Number' field
     od_df['Reference Number'] = od_df['Reference Number'].astype(str).str.strip()
+    od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'<[^>]*>', '', regex=True)  # Remove HTML tags
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'\n', ',', regex=True)
-    od_df['Reference Number'] = od_df['Reference Number'].str.replace(r' ', ',', regex=True)
+    od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'\s+', ',', regex=True)
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'[^0-9,]', '', regex=True)
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r',,', ',', regex=True)
     od_df['Reference Number'] = od_df['Reference Number'].str.rstrip(',')
     od_df['Reference Number'] = od_df['Reference Number'].str.lstrip(',')
 
     # Removing 'Inbound' direction
-    od_df = od_df[od_df['Direction'] != 'Inbound']
+    if 'Direction' in od_df.columns:
+        od_df = od_df[od_df['Direction'] != 'Inbound']
 
     # Handle missing Reference Number
     od_df['Reference Number'] = od_df['Reference Number'].replace('', np.nan)
     od_df = od_df.dropna(subset=['Reference Number'])
 
-    
     # Keeping only the required columns
     columns_to_keep = ['Dwell Time (mins)', 'Reference Number']
-    od_df = od_df.drop(columns=od_df.columns.difference(columns_to_keep))
+    od_df = od_df[[col for col in columns_to_keep if col in od_df.columns]]
 
     # Renaming columns
     od_df.rename(columns={'Dwell Time (mins)': 'Dwell Time', 'Reference Number': 'SO Number'}, inplace=True)
 
     # Filling NaNs and converting 'Dwell Time' to hours
-    od_df = od_df.fillna(0)
-    od_df['Dwell Time'] = round(od_df['Dwell Time'].astype('float') / 60, 2)
+    if 'Dwell Time' in od_df.columns:
+        od_df['Dwell Time'] = od_df['Dwell Time'].fillna(0).astype('float')
+        od_df['Dwell Time'] = round(od_df['Dwell Time'] / 60, 2)
 
     return od_df
 
