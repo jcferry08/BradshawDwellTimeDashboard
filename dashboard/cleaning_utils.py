@@ -5,7 +5,7 @@ def clean_open_dock(od_df):
     # Clean the Open Dock CSV file
 
     # Cleaning the 'Reference Number' field
-    od_df['Reference Number'] = od_df['Reference Number'].str.strip()
+    od_df['Reference Number'] = od_df['Reference Number'].astype(str).str.strip()
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'\n', ',', regex=True)
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r' ', ',', regex=True)
     od_df['Reference Number'] = od_df['Reference Number'].str.replace(r'[^0-9,]', '', regex=True)
@@ -20,6 +20,7 @@ def clean_open_dock(od_df):
     od_df['Reference Number'] = od_df['Reference Number'].replace('', np.nan)
     od_df = od_df.dropna(subset=['Reference Number'])
 
+    
     # Keeping only the required columns
     columns_to_keep = ['Dwell Time (mins)', 'Reference Number']
     od_df = od_df.drop(columns=od_df.columns.difference(columns_to_keep))
@@ -68,12 +69,18 @@ def clean_open_order(oo_df):
 def clean_trailer_activity(ta_df):
     # Clean the Trailer Activity CSV file
 
+    # Standardize column names by removing leading/trailing spaces
+    ta_df.columns = ta_df.columns.str.strip()
+
     # Keep only required columns
-    columns_to_keep = ['CHECKIN DATE TIME', 'APPOINTMENT DATE TIME', 'CHECKOUT DATE TIME', 'CARRIER', 'VISIT TYPE', 'ACTIVITY TYPE ', 'Date/Time', 'SHIPMENT_ID']
+    columns_to_keep = [
+        'CHECKIN DATE TIME', 'APPOINTMENT DATE TIME', 'CHECKOUT DATE TIME',
+        'CARRIER', 'VISIT TYPE', 'ACTIVITY TYPE', 'Date/Time', 'SHIPMENT_ID'
+    ]
     ta_df = ta_df.drop(columns=ta_df.columns.difference(columns_to_keep))
 
-    # Filter rows based on 'ACTIVITY TYPE ' and 'VISIT TYPE'
-    ta_df = ta_df[ta_df['ACTIVITY TYPE '] == 'CLOSED']
+    # Filter rows based on 'ACTIVITY TYPE' and 'VISIT TYPE'
+    ta_df = ta_df[ta_df['ACTIVITY TYPE'] == 'CLOSED']
     ta_df = ta_df[ta_df['VISIT TYPE'].isin(['Pickup Load', 'Live Load'])]
 
     # Handle missing Shipment ID
@@ -84,10 +91,6 @@ def clean_trailer_activity(ta_df):
     ta_df['SHIPMENT_ID'] = ta_df['SHIPMENT_ID'].astype(str).str.replace(',', '').str.extract(r'(\d+)', expand=False)
     ta_df['SHIPMENT_ID'] = pd.to_numeric(ta_df['SHIPMENT_ID'], errors='coerce').fillna(0).astype('int64')
 
-    # Sort and drop duplicates
-    ta_df = ta_df.sort_values(by=['Date/Time', 'SHIPMENT_ID'], ascending=[False, True])
-    ta_df = ta_df.drop_duplicates(subset='SHIPMENT_ID', keep='first')
-
     # Convert datetime columns to datetime type
     ta_df['CHECKIN DATE TIME'] = pd.to_datetime(ta_df['CHECKIN DATE TIME'], errors='coerce')
     ta_df['APPOINTMENT DATE TIME'] = pd.to_datetime(ta_df['APPOINTMENT DATE TIME'], errors='coerce')
@@ -97,9 +100,9 @@ def clean_trailer_activity(ta_df):
     # Handle missing datetime values
     ta_df = ta_df.dropna(subset=['APPOINTMENT DATE TIME', 'CHECKOUT DATE TIME', 'CHECKIN DATE TIME'])
 
-    # Conversions
-    ta_df['VISIT TYPE'] = ta_df['VISIT TYPE'].astype('category')
-    ta_df['ACTIVITY TYPE '] = ta_df['ACTIVITY TYPE '].astype('category')
+    # Sort and drop duplicates
+    ta_df = ta_df.sort_values(by=['Date/Time', 'SHIPMENT_ID'], ascending=[False, True])
+    ta_df = ta_df.drop_duplicates(subset='SHIPMENT_ID', keep='first')
 
     # Calculate required time
     def required_time(row):
@@ -129,10 +132,21 @@ def clean_trailer_activity(ta_df):
         raise ValueError("Scheduled Date column is missing after processing.")
 
     # Keep only the final required columns
-    columns_to_keep = ['CHECKIN DATE TIME', 'CHECKOUT DATE TIME', 'CARRIER', 'VISIT TYPE', 'Date/Time', 'SHIPMENT_ID', 'Required Time', 'Compliance', 'Scheduled Date', 'Week', 'Month']
+    columns_to_keep = [
+        'CHECKIN DATE TIME', 'CHECKOUT DATE TIME', 'CARRIER', 'VISIT TYPE',
+        'Date/Time', 'SHIPMENT_ID', 'Required Time', 'Compliance',
+        'Scheduled Date', 'Week', 'Month'
+    ]
     ta_df = ta_df.drop(columns=ta_df.columns.difference(columns_to_keep))
 
     # Rename columns
-    ta_df.rename(columns={'CHECKIN DATE TIME': 'Checkin DateTime', 'CHECKOUT DATE TIME': 'Checkout DateTime', 'CARRIER': 'Carrier', 'VISIT TYPE': 'Visit Type', 'Date/Time': 'Loaded DateTime', 'SHIPMENT_ID': 'Shipment ID'}, inplace=True)
+    ta_df.rename(columns={
+        'CHECKIN DATE TIME': 'Checkin DateTime',
+        'CHECKOUT DATE TIME': 'Checkout DateTime',
+        'CARRIER': 'Carrier',
+        'VISIT TYPE': 'Visit Type',
+        'Date/Time': 'Loaded DateTime',
+        'SHIPMENT_ID': 'Shipment ID'
+    }, inplace=True)
 
     return ta_df
