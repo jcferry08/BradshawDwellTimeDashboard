@@ -45,11 +45,6 @@ with tabs[0]:
             oo_df = load_data(open_order)
             ta_df = load_data(trailer_activity)
 
-            # Log the loaded data
-            st.write("Loaded Open Dock Data:", od_df.head())
-            st.write("Loaded Open Order Data:", oo_df.head())
-            st.write("Loaded Trailer Activity Data:", ta_df.head())
-
             if od_df.empty or oo_df.empty or ta_df.empty:
                 st.warning("One or more uploaded files are empty or could not be read correctly.")
             else:
@@ -65,10 +60,6 @@ with tabs[0]:
                 # Handle concatenated "SO Number" values by splitting them into separate rows
                 cleaned_open_dock = cleaned_open_dock.assign(**{'SO Number': cleaned_open_dock['SO Number'].str.split(',')}).explode('SO Number')
                 cleaned_open_order = cleaned_open_order.assign(**{'SO Number': cleaned_open_order['SO Number'].str.split(',')}).explode('SO Number')
-
-                st.write("Cleaned Open Dock Data:", cleaned_open_dock.head())
-                st.write("Cleaned Open Order Data:", cleaned_open_order.head())
-                st.write("Cleaned Trailer Activity Data:", cleaned_trailer_activity.head())
 
                 con = duckdb.connect(":memory:")
 
