@@ -43,32 +43,24 @@ def clean_open_order(oo_df):
     columns_to_keep = ['Appt Date and Time', 'SO #', 'Shipment Nbr', 'Order Status']
     oo_df = oo_df.drop(columns=oo_df.columns.difference(columns_to_keep))
 
-    # Convert 'Appt Date and Time' to datetime and drop rows with invalid dates
-    oo_df['Appt Date and Time'] = pd.to_datetime(oo_df['Appt Date and Time'], errors='coerce')
-    oo_df = oo_df.dropna(subset=['Appt Date and Time'])
+    oo_df['Shipment Nbr'] = oo_df['Shipment Nbr'].replace('', np.nan)
+    oo_df = oo_df.dropna(subset = ['Shipment Nbr', 'Appt Date and Time'])
 
-    # Convert 'SO #' to object type and ensure there are no empty values
-    oo_df['SO #'] = oo_df['SO #'].astype(str).str.strip()
-    oo_df = oo_df[oo_df['SO #'] != '']
+    oo_df['Appt Date and Time'] = pd.to_datetime(oo_df['Appt Date and Time'])
+    oo_df['SO #'] = oo_df['SO #'].astype('object')
+    oo_df['Shipment Nbr'] = oo_df['Shipment Nbr'].astype('int64')
+    oo_df['Order Status'] = oo_df['Order Status'].astype('category')
 
-    # Clean 'Shipment Nbr' to remove commas and ensure it is numeric
-    oo_df['Shipment Nbr'] = oo_df['Shipment Nbr'].astype(str).str.replace(',', '').str.extract(r'(\d+)', expand=False)
-    oo_df['Shipment Nbr'] = pd.to_numeric(oo_df['Shipment Nbr'], errors='coerce').fillna(0).astype('int64')
+    oo_df= oo_df[oo_df['Order Status'] == 'Shipped']
 
-    # Filter for shipped orders only (case insensitive and removing extra spaces)
-    oo_df = oo_df[oo_df['Order Status'].str.strip().str.lower() == 'shipped']
-
-    # Rename columns
     oo_df.rename(columns={'Appt Date and Time': 'Appt DateTime', 'SO #': 'SO Number', 'Shipment Nbr': 'Shipment ID'}, inplace=True)
 
-    # Drop unnecessary columns and handle duplicates
-    oo_df = oo_df.drop(columns='Order Status')
+    oo_df = oo_df.drop(columns = 'Order Status')
+
     oo_df = oo_df.sort_values(by=['Appt DateTime', 'Shipment ID'], ascending=[False, True])
+
     oo_df = oo_df.drop_duplicates(subset='Shipment ID', keep='first')
     oo_df = oo_df.drop_duplicates(subset='SO Number', keep='first')
-
-    # Ensure there are no missing values in critical columns
-    oo_df = oo_df.dropna(subset=['SO Number', 'Shipment ID'])
 
     return oo_df
 
