@@ -43,19 +43,19 @@ def clean_open_order(oo_df):
     columns_to_keep = ['Appt Date and Time', 'SO #', 'Shipment Nbr', 'Order Status']
     oo_df = oo_df.drop(columns=oo_df.columns.difference(columns_to_keep))
 
-    # Convert 'Appt Date and Time' to datetime and fill NaNs if needed
+    # Convert 'Appt Date and Time' to datetime and drop rows with invalid dates
     oo_df['Appt Date and Time'] = pd.to_datetime(oo_df['Appt Date and Time'], errors='coerce')
     oo_df = oo_df.dropna(subset=['Appt Date and Time'])
 
     # Convert 'SO #' to object type
-    oo_df['SO #'] = oo_df['SO #'].astype('object')
+    oo_df['SO #'] = oo_df['SO #'].astype(str).str.strip()
 
     # Clean 'Shipment Nbr' to remove commas and ensure it is numeric
     oo_df['Shipment Nbr'] = oo_df['Shipment Nbr'].astype(str).str.replace(',', '').str.extract(r'(\d+)', expand=False)
     oo_df['Shipment Nbr'] = pd.to_numeric(oo_df['Shipment Nbr'], errors='coerce').fillna(0).astype('int64')
 
     # Filter for shipped orders only
-    oo_df = oo_df[oo_df['Order Status'] == 'Shipped']
+    oo_df = oo_df[oo_df['Order Status'].str.strip().str.lower() == 'shipped']
 
     # Rename columns
     oo_df.rename(columns={'Appt Date and Time': 'Appt DateTime', 'SO #': 'SO Number', 'Shipment Nbr': 'Shipment ID'}, inplace=True)
