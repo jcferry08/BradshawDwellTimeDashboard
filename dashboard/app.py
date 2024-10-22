@@ -26,7 +26,6 @@ with tabs[0]:
     st.write("Please Upload the Open Dock, Open Order, and Trailer Activity CSV files here.")
 
     # Create side panel and function to load data. Then allow for a preview of each CSV file uploaded.
-    @st.cache_data
     def load_data(file):
         try:
             data = pd.read_csv(file, parse_dates=True)
@@ -46,6 +45,11 @@ with tabs[0]:
             oo_df = load_data(open_order)
             ta_df = load_data(trailer_activity)
 
+            # Log the loaded data
+            st.write("Loaded Open Dock Data:", od_df.head())
+            st.write("Loaded Open Order Data:", oo_df.head())
+            st.write("Loaded Trailer Activity Data:", ta_df.head())
+
             if od_df.empty or oo_df.empty or ta_df.empty:
                 st.warning("One or more uploaded files are empty or could not be read correctly.")
             else:
@@ -54,6 +58,10 @@ with tabs[0]:
                 cleaned_open_order = clean_open_order(oo_df)
                 cleaned_trailer_activity = clean_trailer_activity(ta_df)
 
+                st.write("Cleaned Open Dock Data:", cleaned_open_dock.head())
+                st.write("Cleaned Open Order Data:", cleaned_open_order.head())
+                st.write("Cleaned Trailer Activity Data:", cleaned_trailer_activity.head())
+
                 con = duckdb.connect(":memory:")
 
                 # Creating tables for duckdb from cleaned DataFrames
@@ -61,6 +69,7 @@ with tabs[0]:
                 con.execute("CREATE TABLE open_order AS SELECT * FROM cleaned_open_order")
                 con.execute("CREATE TABLE trailer_report AS SELECT * FROM cleaned_trailer_activity")
 
+                # Simplified SQL join for merging data
                 merged_df = con.execute("""
                     SELECT
                         open_dock."SO Number" AS "Dock SO Number",
@@ -70,8 +79,10 @@ with tabs[0]:
                         open_order."Shipment ID"
                     FROM open_dock
                     LEFT JOIN open_order
-                    ON POSITION(CAST(open_order."SO Number" AS VARCHAR) IN CAST(open_dock."SO Number" AS VARCHAR)) > 0
+                    ON open_order."SO Number" = open_dock."SO Number"
                 """).fetchdf()
+
+                st.write("Merged DataFrame after first join:", merged_df.head())
 
                 if not merged_df.empty:
                     columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Appt DateTime', 'Shipment ID']
@@ -101,6 +112,8 @@ with tabs[0]:
                         INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
                     """).fetchdf()
 
+                    st.write("Merged DataFrame after second join:", dwell_and_ontime_compliance.head())
+
                     # Ensure required columns exist and handle missing values
                     required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
                     for col in required_columns:
@@ -121,6 +134,9 @@ with tabs[0]:
 
                     # Store the result in session state
                     st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
+                    st.write("Final Cleaned and Merged DataFrame:", dwell_and_ontime_compliance.head())
+                else:
+                    st.warning("Merged DataFrame is empty, check join conditions.")
 
         except Exception as e:
             st.error(f"An error occurred while processing the uploaded files: {e}")
@@ -153,7 +169,6 @@ with tabs[1]:
         else:
             st.info("No cleaned data available yet. Please upload and clean the data first.")
 
-    @st.cache_data
     def convert_df(df):
         return df.to_csv(index=False).encode('utf-8')
 
