@@ -47,14 +47,15 @@ def clean_open_order(oo_df):
     oo_df['Appt Date and Time'] = pd.to_datetime(oo_df['Appt Date and Time'], errors='coerce')
     oo_df = oo_df.dropna(subset=['Appt Date and Time'])
 
-    # Convert 'SO #' to object type
+    # Convert 'SO #' to object type and ensure there are no empty values
     oo_df['SO #'] = oo_df['SO #'].astype(str).str.strip()
+    oo_df = oo_df[oo_df['SO #'] != '']
 
     # Clean 'Shipment Nbr' to remove commas and ensure it is numeric
     oo_df['Shipment Nbr'] = oo_df['Shipment Nbr'].astype(str).str.replace(',', '').str.extract(r'(\d+)', expand=False)
     oo_df['Shipment Nbr'] = pd.to_numeric(oo_df['Shipment Nbr'], errors='coerce').fillna(0).astype('int64')
 
-    # Filter for shipped orders only
+    # Filter for shipped orders only (case insensitive and removing extra spaces)
     oo_df = oo_df[oo_df['Order Status'].str.strip().str.lower() == 'shipped']
 
     # Rename columns
@@ -65,6 +66,9 @@ def clean_open_order(oo_df):
     oo_df = oo_df.sort_values(by=['Appt DateTime', 'Shipment ID'], ascending=[False, True])
     oo_df = oo_df.drop_duplicates(subset='Shipment ID', keep='first')
     oo_df = oo_df.drop_duplicates(subset='SO Number', keep='first')
+
+    # Ensure there are no missing values in critical columns
+    oo_df = oo_df.dropna(subset=['SO Number', 'Shipment ID'])
 
     return oo_df
 
