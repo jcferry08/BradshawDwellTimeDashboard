@@ -899,11 +899,9 @@ with tabs[5]:
                 st.table(compliance_pivot)
 
             # Add Line Chart for Compliance Trend (using the last day of each month for data points)
-            trend_data = ytd_df.groupby(['Scheduled Date', 'Compliance']).size().unstack(fill_value=0).reset_index()
-            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
-            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
+            trend_data = ytd_df.groupby([ytd_df['Scheduled Date'].dt.to_period('M'), 'Compliance']).size().unstack(fill_value=0).reset_index()
+            trend_data['Scheduled Date'] = trend_data['Scheduled Date'].dt.to_timestamp('M')
             
-
             # Create line chart
             fig = go.Figure()
 
