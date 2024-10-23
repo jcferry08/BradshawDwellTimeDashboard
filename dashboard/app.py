@@ -5,6 +5,10 @@ import streamlit as st
 import duckdb
 from cleaning_utils import clean_open_dock, clean_open_order, clean_trailer_activity
 from datetime import datetime, timedelta
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 # Create startup page and initialize tabs.
 st.set_page_config(
@@ -26,13 +30,10 @@ with tabs[0]:
     st.write("Please Upload the Open Dock, Open Order, and Trailer Activity CSV files here.")
 
     # Create side panel and function to load data. Then allow for a preview of each CSV file uploaded.
+    @st.cache_data
     def load_data(file):
-        try:
-            data = pd.read_csv(file, parse_dates=True)
-            return data
-        except Exception as e:
-            st.error(f"An error occurred while reading the file: {e}")
-            return pd.DataFrame()
+        data = pd.read_csv(file, parse_dates=True)
+        return data
 
     open_dock = st.sidebar.file_uploader("Upload Open Dock CSV file", type=['csv'])
     open_order = st.sidebar.file_uploader("Upload Open Order CSV file", type=['csv'])
@@ -45,136 +46,100 @@ with tabs[0]:
             oo_df = load_data(open_order)
             ta_df = load_data(trailer_activity)
 
-            if od_df.empty or oo_df.empty or ta_df.empty:
-                st.warning("One or more uploaded files are empty or could not be read correctly.")
-            else:
-                # Clean and merge data sets immediately after all files are uploaded
-                cleaned_open_dock = clean_open_dock(od_df)
-                cleaned_open_order = clean_open_order(oo_df)
-                cleaned_trailer_activity = clean_trailer_activity(ta_df)
+            # Clean and merge data sets immediately after all files are uploaded
+            cleaned_open_dock = clean_open_dock(od_df)
+            cleaned_open_order = clean_open_order(oo_df)
+            cleaned_trailer_activity = clean_trailer_activity(ta_df)
 
-                # Ensure "SO Number" columns are treated as strings to prevent conversion issues
-                cleaned_open_dock['SO Number'] = cleaned_open_dock['SO Number'].astype(str)
-                cleaned_open_order['SO Number'] = cleaned_open_order['SO Number'].astype(str)
+            con = duckdb.connect(":memory:")
 
-                # Handle concatenated "SO Number" values by splitting them into separate rows
-                try:
-                    cleaned_open_dock = cleaned_open_dock.assign(**{'SO Number': cleaned_open_dock['SO Number'].str.split(',')}).explode('SO Number')
-                    cleaned_open_order = cleaned_open_order.assign(**{'SO Number': cleaned_open_order['SO Number'].str.split(',')}).explode('SO Number')
-                except Exception as e:
-                    st.error(f"Error during splitting or exploding 'SO Number' column: {e}")
+            # Creating tables for duckdb from cleaned DataFrames
+            con.execute("CREATE TABLE open_dock AS SELECT * FROM cleaned_open_dock")
+            con.execute("CREATE TABLE open_order AS SELECT * FROM cleaned_open_order")
+            con.execute("CREATE TABLE trailer_report AS SELECT * FROM cleaned_trailer_activity")
 
-                # Debugging step: Check the length of dataframes after splitting and exploding
-                st.write(f"Length of cleaned_open_dock after split and explode: {len(cleaned_open_dock)}")
-                st.write(f"Length of cleaned_open_order after split and explode: {len(cleaned_open_order)}")
+            merged_df = con.execute("""
+                SELECT
+                    open_dock."SO Number" AS "Dock SO Number",
+                    open_dock."Dwell Time",
+                    open_order."SO Number" AS "Order SO Number",
+                    open_order."Appt DateTime",
+                    open_order."Shipment ID"
+                FROM open_dock
+                LEFT JOIN open_order
+                ON POSITION(CAST(open_order."SO Number" AS VARCHAR) IN CAST(open_dock."SO Number" AS VARCHAR)) > 0
+            """).fetchdf()
 
-                # Check for missing values in SO Number columns
-                if cleaned_open_dock['SO Number'].isna().any():
-                    st.error("There are missing SO Numbers in cleaned_open_dock")
-                if cleaned_open_order['SO Number'].isna().any():
-                    st.error("There are missing SO Numbers in cleaned_open_order")
+            if not merged_df.empty:
+                columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Appt DateTime', 'Shipment ID']
+                merged_df = merged_df.drop(columns=merged_df.columns.difference(columns_to_keep))
 
-                con = duckdb.connect(":memory:")
+                merged_df.rename(columns={'Dock SO Number': 'SO Number'}, inplace=True)
+                merged_df['SO Number'] = merged_df['SO Number'].astype('object')
 
-                # Creating tables for duckdb from cleaned DataFrames
-                con.execute("CREATE TABLE open_dock AS SELECT * FROM cleaned_open_dock")
-                con.execute("CREATE TABLE open_order AS SELECT * FROM cleaned_open_order")
-                con.execute("CREATE TABLE trailer_report AS SELECT * FROM cleaned_trailer_activity")
-
-                # Simplified SQL join for merging data
-                merged_df = con.execute("""
-                    SELECT
-                        open_dock."SO Number" AS "Dock SO Number",
-                        open_dock."Dwell Time",
-                        open_order."SO Number" AS "Order SO Number",
-                        open_order."Appt DateTime",
-                        open_order."Shipment ID"
-                    FROM open_dock
-                    LEFT JOIN open_order
-                    ON open_order."SO Number" = open_dock."SO Number"
+                # Query to merge with trailer report
+            if merged_df is not None:
+                dwell_and_ontime_compliance = con.execute("""
+                    SELECT 
+                        trailer_report."Shipment ID",
+                        merged_df."SO Number",
+                        merged_df."Appt DateTime",
+                        trailer_report."Required Time",
+                        trailer_report."Checkin DateTime",
+                        trailer_report."Checkout DateTime",
+                        trailer_report.Carrier,
+                        trailer_report."Visit Type",
+                        trailer_report."Loaded DateTime",
+                        trailer_report.Compliance,
+                        merged_df."Dwell Time",
+                        trailer_report."Scheduled Date",
+                        trailer_report.Week,
+                        trailer_report.Month
+                    FROM trailer_report
+                    INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
                 """).fetchdf()
 
-                # Debugging step: Check the merged DataFrame
-                st.write("Merged DF Preview:", merged_df.head())
-                if merged_df.isna().any().any():
-                    st.warning("Merged DataFrame contains missing values.")
+                # Ensure required columns exist and handle missing values
+                required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
+                for col in required_columns:
+                    if col not in dwell_and_ontime_compliance.columns:
+                        st.warning(f"'{col}' column is missing in the merged DataFrame after joining. Ignoring this issue.")
 
-                if not merged_df.empty:
-                    columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Appt DateTime', 'Shipment ID']
-                    merged_df = merged_df.drop(columns=merged_df.columns.difference(columns_to_keep))
+                if not dwell_and_ontime_compliance.empty:
+                    dwell_and_ontime_compliance = dwell_and_ontime_compliance.sort_values(by=['Loaded DateTime', 'Shipment ID'], ascending=[False, True])
+                    dwell_and_ontime_compliance = dwell_and_ontime_compliance.drop_duplicates(subset='Shipment ID', keep='first')
 
-                    merged_df.rename(columns={'Dock SO Number': 'SO Number'}, inplace=True)
-                    merged_df['SO Number'] = merged_df['SO Number'].astype('object')
+                dwell_and_ontime_compliance['Shipment ID'] = dwell_and_ontime_compliance['Shipment ID'].astype(str).str.replace(' ', '')
 
-                    # Query to merge with trailer report
-                    dwell_and_ontime_compliance = con.execute("""
-                        SELECT 
-                            trailer_report."Shipment ID",
-                            merged_df."SO Number",
-                            merged_df."Appt DateTime",
-                            trailer_report."Required Time",
-                            trailer_report."Checkin DateTime",
-                            trailer_report."Checkout DateTime",
-                            trailer_report.Carrier,
-                            trailer_report."Visit Type",
-                            trailer_report."Loaded DateTime",
-                            trailer_report.Compliance,
-                            merged_df."Dwell Time",
-                            trailer_report."Scheduled Date",
-                            trailer_report.Week,
-                            trailer_report.Month
-                        FROM trailer_report
-                        INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
-                    """).fetchdf()
+                if 'Scheduled Date' in dwell_and_ontime_compliance.columns:
+                    dwell_and_ontime_compliance['Scheduled Date'] = pd.to_datetime(dwell_and_ontime_compliance['Scheduled Date'], errors='coerce').dt.strftime("%m-%d-%Y")
 
-                    # Debugging step: Check the final merged DataFrame
-                    st.write("Dwell and On Time Compliance Preview:", dwell_and_ontime_compliance.head())
-                    if dwell_and_ontime_compliance.empty:
-                        st.warning("No rows after merging with trailer report. Please check if 'Shipment ID' has matching values in both datasets.")
+                # Drop rows with missing critical values to avoid KeyErrors
+                dwell_and_ontime_compliance.dropna(subset=['Shipment ID', 'Scheduled Date', 'Loaded DateTime'], inplace=True)
 
-                    # Ensure required columns exist and handle missing values
-                    required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
-                    for col in required_columns:
-                        if col not in dwell_and_ontime_compliance.columns:
-                            st.warning(f"'{col}' column is missing in the merged DataFrame after joining.")
-
-                    if not dwell_and_ontime_compliance.empty:
-                        dwell_and_ontime_compliance = dwell_and_ontime_compliance.sort_values(by=['Loaded DateTime', 'Shipment ID'], ascending=[False, True])
-                        dwell_and_ontime_compliance = dwell_and_ontime_compliance.drop_duplicates(subset='Shipment ID', keep='first')
-
-                    dwell_and_ontime_compliance['Shipment ID'] = dwell_and_ontime_compliance['Shipment ID'].astype(str).str.replace(' ', '')
-
-                    if 'Scheduled Date' in dwell_and_ontime_compliance.columns:
-                        dwell_and_ontime_compliance['Scheduled Date'] = pd.to_datetime(dwell_and_ontime_compliance['Scheduled Date'], errors='coerce').dt.strftime("%m-%d-%Y")
-
-                    # Drop rows with missing critical values to avoid KeyErrors
-                    dwell_and_ontime_compliance.dropna(subset=['Shipment ID', 'Scheduled Date', 'Loaded DateTime'], inplace=True)
-
-                    # Store the result in session state
-                    st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
-                else:
-                    st.warning("Merged DataFrame is empty, check join conditions.")
+                # Store the result in session state
+                st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
 
         except Exception as e:
-            st.error(f"An error occurred while processing the uploaded files: {e}")
+            st.warning("An error occurred while processing the uploaded files. Ignoring this error.")
 
     with st.expander('Preview Open Dock CSV'):
-        if open_dock is not None and 'od_df' in locals() and not od_df.empty:
+        if open_dock is not None and 'od_df' in locals():
             st.write(od_df.head())
         else:
-            st.info("Open Dock CSV not uploaded yet or is empty.")
+            st.info("Open Dock CSV not uploaded yet.")
 
     with st.expander('Preview Open Order CSV'):
-        if open_order is not None and 'oo_df' in locals() and not oo_df.empty:
+        if open_order is not None and 'oo_df' in locals():
             st.write(oo_df.head())
         else:
-            st.info("Open Order CSV not uploaded yet or is empty.")
+            st.info("Open Order CSV not uploaded yet.")
 
     with st.expander('Preview Trailer Activity CSV'):
-        if trailer_activity is not None and 'ta_df' in locals() and not ta_df.empty:
+        if trailer_activity is not None and 'ta_df' in locals():
             st.write(ta_df.head())
         else:
-            st.info("Trailer Activity CSV not uploaded yet or is empty.")
+            st.info("Trailer Activity CSV not uploaded yet.")
 
 with tabs[1]:
     st.header("Cleaned Data")
@@ -186,6 +151,7 @@ with tabs[1]:
         else:
             st.info("No cleaned data available yet. Please upload and clean the data first.")
 
+    @st.cache_data
     def convert_df(df):
         return df.to_csv(index=False).encode('utf-8')
 
@@ -198,9 +164,6 @@ with tabs[1]:
             file_name='Bradshaw_Dwell_and_OnTime_Compliance.csv',
             mime='text/csv'
         )
-
-# The rest of the tabs (Daily Dashboard, Weekly Dashboard, etc.) would remain the same.
-# Make sure to continue debugging and adding logging as needed in those sections too.
 
 with tabs[2]:
     st.header("Daily Dashboard")
@@ -924,8 +887,11 @@ with tabs[5]:
                 st.subheader('YTD On Time Compliance')
                 st.table(compliance_pivot)
 
-            # Add Line Chart for Compliance Trend (using the average of each month for data points)
+            # Add Line Chart for Compliance Trend (using the last day of each month for data points)
             trend_data = ytd_df.groupby(['Scheduled Date', 'Compliance']).size().unstack(fill_value=0).reset_index()
+            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
+            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
+            
 
             # Create line chart
             fig = go.Figure()
