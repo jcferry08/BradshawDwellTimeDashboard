@@ -81,8 +81,6 @@ with tabs[0]:
                     ON open_order."SO Number" = open_dock."SO Number"
                 """).fetchdf()
 
-                st.write("Merged DataFrame after first join:", merged_df.head())
-
                 if not merged_df.empty:
                     columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Appt DateTime', 'Shipment ID']
                     merged_df = merged_df.drop(columns=merged_df.columns.difference(columns_to_keep))
@@ -111,8 +109,6 @@ with tabs[0]:
                         INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
                     """).fetchdf()
 
-                    st.write("Merged DataFrame after second join:", dwell_and_ontime_compliance.head())
-
                     # Ensure required columns exist and handle missing values
                     required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
                     for col in required_columns:
@@ -133,7 +129,6 @@ with tabs[0]:
 
                     # Store the result in session state
                     st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
-                    st.write("Final Cleaned and Merged DataFrame:", dwell_and_ontime_compliance.head())
                 else:
                     st.warning("Merged DataFrame is empty, check join conditions.")
 
