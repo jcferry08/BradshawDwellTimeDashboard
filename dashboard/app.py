@@ -901,6 +901,9 @@ with tabs[5]:
             # Add Line Chart for Compliance Trend (using the last day of each month for data points)
             trend_data = ytd_df.groupby([ytd_df['Scheduled Date'].dt.to_period('M'), 'Compliance']).size().unstack(fill_value=0).reset_index()
             trend_data['Scheduled Date'] = trend_data['Scheduled Date'].dt.to_timestamp()
+
+            trend_data_avg = trend_data.groupby(trend_data['Scheduled Date'].dt.to_period('M')).mean().reset_index()
+            trend_data_avg['Scheduled Date'] = trend_data_avg['Scheduled Date'].dt.to_timestamp()
             
             # Create line chart
             fig = go.Figure()
