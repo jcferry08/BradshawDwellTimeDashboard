@@ -898,31 +898,32 @@ with tabs[5]:
                 st.subheader('YTD On Time Compliance')
                 st.table(compliance_pivot)
 
-            # Add Line Chart for Compliance Trend (using the last day of each month for data points)
+            # Add Line Chart for Compliance Trend (using the average of each month for data points)
             trend_data = ytd_df.groupby([ytd_df['Scheduled Date'].dt.to_period('M'), 'Compliance']).size().unstack(fill_value=0).reset_index()
             trend_data['Scheduled Date'] = trend_data['Scheduled Date'].dt.to_timestamp()
 
+            # Calculate the average number of shipments per month
             trend_data_avg = trend_data.groupby(trend_data['Scheduled Date'].dt.to_period('M')).mean().reset_index()
             trend_data_avg['Scheduled Date'] = trend_data_avg['Scheduled Date'].dt.to_timestamp()
-            
+
             # Create line chart
             fig = go.Figure()
 
             # Add 'On Time' line to the chart
-            if 'On Time' in trend_data.columns:
+            if 'On Time' in trend_data_avg.columns:
                 fig.add_trace(go.Scatter(
-                    x=trend_data['Scheduled Date'], 
-                    y=trend_data['On Time'], 
+                    x=trend_data_avg['Scheduled Date'], 
+                    y=trend_data_avg['On Time'], 
                     mode='lines+markers',
                     name='On Time',
                     line=dict(color='green')
                 ))
 
             # Add 'Late' line to the chart
-            if 'Late' in trend_data.columns:
+            if 'Late' in trend_data_avg.columns:
                 fig.add_trace(go.Scatter(
-                    x=trend_data['Scheduled Date'], 
-                    y=trend_data['Late'], 
+                    x=trend_data_avg['Scheduled Date'], 
+                    y=trend_data_avg['Late'], 
                     mode='lines+markers',
                     name='Late',
                     line=dict(color='red')
@@ -931,7 +932,7 @@ with tabs[5]:
             fig.update_layout(
                 title='Compliance Trend Over the Year',
                 xaxis_title='Scheduled Date',
-                yaxis_title='Number of Shipments',
+                yaxis_title='Average Number of Shipments',
                 xaxis=dict(type='category'),
                 template='plotly_white'
             )
