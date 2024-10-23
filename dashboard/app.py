@@ -903,8 +903,7 @@ with tabs[5]:
             trend_data['Scheduled Date'] = trend_data['Scheduled Date'].dt.to_timestamp()
 
             # Calculate the average number of shipments per month
-            trend_data_avg = trend_data.groupby(trend_data['Scheduled Date'].dt.to_period('M')).mean().reset_index()
-            trend_data_avg['Scheduled Date'] = trend_data_avg['Scheduled Date'].dt.to_timestamp()
+            trend_data_avg = trend_data.groupby('Scheduled Date').mean().reset_index()
 
             # Create line chart
             fig = go.Figure()
