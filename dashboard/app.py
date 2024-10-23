@@ -58,8 +58,21 @@ with tabs[0]:
                 cleaned_open_order['SO Number'] = cleaned_open_order['SO Number'].astype(str)
 
                 # Handle concatenated "SO Number" values by splitting them into separate rows
-                cleaned_open_dock = cleaned_open_dock.assign(**{'SO Number': cleaned_open_dock['SO Number'].str.split(',')}).explode('SO Number')
-                cleaned_open_order = cleaned_open_order.assign(**{'SO Number': cleaned_open_order['SO Number'].str.split(',')}).explode('SO Number')
+                try:
+                    cleaned_open_dock = cleaned_open_dock.assign(**{'SO Number': cleaned_open_dock['SO Number'].str.split(',')}).explode('SO Number')
+                    cleaned_open_order = cleaned_open_order.assign(**{'SO Number': cleaned_open_order['SO Number'].str.split(',')}).explode('SO Number')
+                except Exception as e:
+                    st.error(f"Error during splitting or exploding 'SO Number' column: {e}")
+
+                # Debugging step: Check the length of dataframes after splitting and exploding
+                st.write(f"Length of cleaned_open_dock after split and explode: {len(cleaned_open_dock)}")
+                st.write(f"Length of cleaned_open_order after split and explode: {len(cleaned_open_order)}")
+
+                # Check for missing values in SO Number columns
+                if cleaned_open_dock['SO Number'].isna().any():
+                    st.error("There are missing SO Numbers in cleaned_open_dock")
+                if cleaned_open_order['SO Number'].isna().any():
+                    st.error("There are missing SO Numbers in cleaned_open_order")
 
                 con = duckdb.connect(":memory:")
 
@@ -80,6 +93,11 @@ with tabs[0]:
                     LEFT JOIN open_order
                     ON open_order."SO Number" = open_dock."SO Number"
                 """).fetchdf()
+
+                # Debugging step: Check the merged DataFrame
+                st.write("Merged DF Preview:", merged_df.head())
+                if merged_df.isna().any().any():
+                    st.warning("Merged DataFrame contains missing values.")
 
                 if not merged_df.empty:
                     columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Appt DateTime', 'Shipment ID']
@@ -108,6 +126,11 @@ with tabs[0]:
                         FROM trailer_report
                         INNER JOIN merged_df ON trailer_report."Shipment ID" = merged_df."Shipment ID"
                     """).fetchdf()
+
+                    # Debugging step: Check the final merged DataFrame
+                    st.write("Dwell and On Time Compliance Preview:", dwell_and_ontime_compliance.head())
+                    if dwell_and_ontime_compliance.empty:
+                        st.warning("No rows after merging with trailer report. Please check if 'Shipment ID' has matching values in both datasets.")
 
                     # Ensure required columns exist and handle missing values
                     required_columns = ['Shipment ID', 'Scheduled Date', 'Loaded DateTime']
@@ -175,6 +198,9 @@ with tabs[1]:
             file_name='Bradshaw_Dwell_and_OnTime_Compliance.csv',
             mime='text/csv'
         )
+
+# The rest of the tabs (Daily Dashboard, Weekly Dashboard, etc.) would remain the same.
+# Make sure to continue debugging and adding logging as needed in those sections too.
 
 with tabs[2]:
     st.header("Daily Dashboard")
