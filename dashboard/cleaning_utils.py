@@ -31,6 +31,9 @@ def clean_open_dock(od_df):
 
 def clean_open_order(oo_df):
 
+    if 'Ship Via' in oo_df.columns:
+        oo_df = oo_df[oo_df['Ship Via'] != ['AMZX', 'DIMS', 'EXLA', 'F107', 'F109', 'F110', 'F111', 'F112', 'F117', 'FXFE', 'FXLA', 'FXNL', 'ODFL', 'SAIA', 'U743', 'U746', 'U747', 'U748', 'VQXX', 'CTII']]
+
     columns_to_keep = ['Appt Date and Time', 'SO #', 'Shipment Nbr', 'Order Status']
     oo_df = oo_df.drop(columns=oo_df.columns.difference(columns_to_keep))
 
