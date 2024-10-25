@@ -165,6 +165,188 @@ with tabs[1]:
             mime='text/csv'
         )
 
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
+import duckdb
+from cleaning_utils import clean_open_dock, clean_open_order, clean_trailer_activity
+from datetime import datetime, timedelta
+
+st.set_page_config(
+    page_title='Bradshaw Dwell Time and Compliance Dashboard', 
+    page_icon=':bar_chart:',
+    layout='wide'
+)
+
+st.title('Dwell Time and Compliance Dashboard')
+st.markdown('_Alpha V. 2.0.0')
+
+tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
+
+# Define the dwell_and_ontime_compliance dataframe using session state
+if 'dwell_and_ontime_compliance' not in st.session_state:
+    st.session_state['dwell_and_ontime_compliance'] = pd.DataFrame()
+
+# Create Data Upload tab
+with tabs[0]:
+    st.header("Data Upload")
+    st.write("Please Upload the Open Dock, Open Order, and Trailer Activity CSV files here.")
+
+    # Create side panel and function to load data. Then allow for a preview of each CSV file uploaded.
+    @st.cache_data
+    def load_data(file):
+        data = pd.read_csv(file, parse_dates=True, low_memory=False)
+        return data
+
+    open_dock = st.sidebar.file_uploader("Upload Open Dock CSV file", type=['csv'])
+    open_order = st.sidebar.file_uploader("Upload Open Order CSV file", type=['csv'])
+    trailer_activity = st.sidebar.file_uploader("Upload Trailer Activity CSV file", type=['csv'])
+
+    if open_dock is not None and open_order is not None and trailer_activity is not None:
+        try:
+            # Load the data
+            od_df = load_data(open_dock)
+            oo_df = load_data(open_order)
+            ta_df = load_data(trailer_activity)
+
+            # Clean and merge data sets immediately after all files are uploaded
+            cleaned_open_dock = clean_open_dock(od_df)
+            cleaned_open_order = clean_open_order(oo_df)
+            cleaned_trailer_activity = clean_trailer_activity(ta_df)
+
+            # Create a DuckDB connection
+            con = duckdb.connect(":memory:")
+
+            # Creating tables for DuckDB from cleaned DataFrames
+            con.execute("CREATE TABLE open_dock AS SELECT * FROM cleaned_open_dock")
+            con.execute("CREATE TABLE open_order AS SELECT * FROM cleaned_open_order")
+            con.execute("CREATE TABLE trailer_report AS SELECT * FROM cleaned_trailer_activity")
+
+            # First merge
+            merged_df = con.execute("""
+                SELECT
+                    open_dock."SO Number" AS "Dock SO Number",
+                    open_dock."Dwell Time" AS "Dwell Time",
+                    open_dock."Status" AS "Event Status",
+                    open_order."SO Number" AS "Order SO Number",
+                    open_order."Appt DateTime" AS "Appt DateTime",
+                    open_order."Shipment ID" AS "Shipment ID"
+                FROM open_dock
+                LEFT JOIN open_order
+                ON open_order."SO Number" = open_dock."SO Number"
+            """).fetchdf()
+
+            # Remove unnecessary columns
+            if not merged_df.empty:
+                columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Event Status', 'Appt DateTime', 'Shipment ID']
+                merged_df = merged_df[columns_to_keep]
+                merged_df.rename(columns={'Dock SO Number': 'SO Number'}, inplace=True)
+                merged_df['SO Number'] = merged_df['SO Number'].astype('object')
+
+            # Standardizing 'Shipment ID' column for the second merge
+            merged_df['Shipment ID'] = merged_df['Shipment ID'].astype(str).str.strip()
+            cleaned_trailer_activity['Shipment ID'] = cleaned_trailer_activity['Shipment ID'].astype(str).str.strip()
+
+            # Second merge
+            dwell_and_ontime_compliance = con.execute("""
+                SELECT 
+                    trailer_report."Shipment ID",
+                    merged_df."SO Number",
+                    merged_df."Appt DateTime",
+                    trailer_report."Required Time",
+                    trailer_report."Checkin DateTime",
+                    trailer_report."Checkout DateTime",
+                    trailer_report.Carrier,
+                    trailer_report."Visit Type",
+                    trailer_report."Loaded DateTime",
+                    trailer_report.Compliance,
+                    merged_df."Dwell Time",
+                    merged_df."Event Status",
+                    trailer_report."Scheduled Date",
+                    trailer_report.Week,
+                    trailer_report.Month
+                FROM merged_df
+                LEFT JOIN trailer_report 
+                ON trailer_report."Shipment ID" = merged_df."Shipment ID"
+            """).fetchdf()
+
+            # Remove unnecessary columns
+            if not dwell_and_ontime_compliance.empty:
+                columns_to_keep = [
+                    'Shipment ID', 'SO Number', 'Appt DateTime', 'Required Time',
+                    'Checkin DateTime', 'Checkout DateTime', 'Carrier', 'Visit Type',
+                    'Loaded DateTime', 'Compliance', 'Dwell Time', 'Event Status', 
+                    'Scheduled Date', 'Week', 'Month'
+                ]
+                dwell_and_ontime_compliance = dwell_and_ontime_compliance[columns_to_keep]
+
+                # Replace Compliance value with 'No Show' where Event Status is 'NoShow'
+                dwell_and_ontime_compliance.loc[dwell_and_ontime_compliance['Event Status'] == 'NoShow', 'Compliance'] = 'No Show'
+                dwell_and_ontime_compliance.loc[dwell_and_ontime_compliance['Event Status'] == 'NoShow', ['Checkin DateTime', 'Checkout DateTime', 'Loaded DateTime', 'Dwell Time']] = np.nan
+
+                # Drop the 'Event Status' column
+                dwell_and_ontime_compliance.drop(columns=['Event Status'], inplace=True)
+
+                # Filter out specified carriers
+                carriers_to_exclude = [
+                    'AMZX', 'DIMES', 'EXLA', 'SAIA', 'FXFE', 'FXLA', 'FXNL', 'F106', 'F107',
+                    'F109', 'F110', 'F111', 'F112', 'F117', 'ODFL', 'U743', 'U746', 'U748', 'VQXX', 'CTII'
+                ]
+                dwell_and_ontime_compliance = dwell_and_ontime_compliance[~dwell_and_ontime_compliance['Carrier'].isin(carriers_to_exclude)]
+
+                # Replace empty strings in 'Shipment ID' with NaN and drop rows with NaN in 'Shipment ID'
+                dwell_and_ontime_compliance['Shipment ID'].replace('', np.nan, inplace=True)
+                dwell_and_ontime_compliance.dropna(subset=['Shipment ID'], inplace=True)
+
+                # Store in session state
+                st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
+
+        except Exception as e:
+            st.warning(f"An error occurred while processing the uploaded files: {e}")
+
+    with st.expander('Preview Open Dock CSV'):
+        if open_dock is not None and 'od_df' in locals():
+            st.write(od_df.head())
+        else:
+            st.info("Open Dock CSV not uploaded yet.")
+
+    with st.expander('Preview Open Order CSV'):
+        if open_order is not None and 'oo_df' in locals():
+            st.write(oo_df.head())
+        else:
+            st.info("Open Order CSV not uploaded yet.")
+
+    with st.expander('Preview Trailer Activity CSV'):
+        if trailer_activity is not None and 'ta_df' in locals():
+            st.write(ta_df.head())
+        else:
+            st.info("Trailer Activity CSV not uploaded yet.")
+
+with tabs[1]:
+    st.header("Cleaned Data")
+    st.write("The data has been cleaned and merged. Please see the preview below and or download the cleaned data as a .csv.")
+
+    with st.expander('Preview Cleaned Data'):
+        if not st.session_state['dwell_and_ontime_compliance'].empty:
+            st.write(st.session_state['dwell_and_ontime_compliance'].head())
+        else:
+            st.info("No cleaned data available yet. Please upload and clean the data first.")
+
+    @st.cache_data
+    def convert_df(df):
+        return df.to_csv(index=False).encode('utf-8')
+
+    if not st.session_state['dwell_and_ontime_compliance'].empty:
+        csv = convert_df(st.session_state['dwell_and_ontime_compliance'])
+
+        st.download_button(
+            label="Download Cleaned Data as CSV",
+            data=csv,
+            file_name='Bradshaw_Dwell_and_OnTime_Compliance.csv',
+            mime='text/csv'
+        )
+
 with tabs[2]:
     st.header("Daily Dashboard")
     selected_date = st.date_input("Select Date for Daily Dashboard")
@@ -393,18 +575,21 @@ with tabs[3]:
                             textfont=dict(color='white'),  # Make the text color white
                         ))
 
-                    # Add 'Late' line to the chart
-                    if 'Late' in trend_data.columns:
+                    # Add 'Late & No Show' line to the chart
+                    if 'Late' in trend_data.columns or 'No Show' in trend_data.columns:
+                        # Sum up 'Late' and 'No Show' counts for each date
+                        trend_data['Late & No Show'] = trend_data.get('Late', 0) + trend_data.get('No Show', 0)
                         fig.add_trace(go.Scatter(
                             x=trend_data['Scheduled Date'], 
-                            y=trend_data['Late'], 
+                            y=trend_data['Late & No Show'], 
                             mode='lines+markers+text',
-                            name='Late',
+                            name='Late & No Show',
                             line=dict(color='red'),
-                            text=trend_data['Late'],  # Add counts as text labels
-                            textposition='top center',  # Positioning the text above the points
-                            textfont=dict(color='white'),  # Make the text color white
+                            text=trend_data['Late & No Show'],
+                            textposition='top center',
+                            textfont=dict(color='white'),
                         ))
+
 
                     # Update layout for better readability
                     fig.update_layout(
@@ -654,17 +839,18 @@ with tabs[4]:
                         textfont=dict(color='white'),  # Make the text color white
                     ))
 
-                # Add 'Late' line to the chart
-                if 'Late' in trend_data.columns:
+                # Add 'Late & No Show' line to the chart
+                if 'Late' in trend_data.columns or 'No Show' in trend_data.columns:
+                    trend_data['Late & No Show'] = trend_data.get('Late', 0) + trend_data.get('No Show', 0)
                     fig.add_trace(go.Scatter(
                         x=trend_data['Scheduled Date'], 
-                        y=trend_data['Late'], 
+                        y=trend_data['Late & No Show'], 
                         mode='lines+markers+text',
-                        name='Late',
+                        name='Late & No Show',
                         line=dict(color='red'),
-                        text=trend_data['Late'],  # Add counts as text labels
-                        textposition='top center',  # Positioning the text above the points
-                        textfont=dict(color='white'),  # Make the text color white
+                        text=trend_data['Late & No Show'],
+                        textposition='top center',
+                        textfont=dict(color='white'),
                     ))
 
                 # Update layout for better readability
@@ -887,39 +1073,53 @@ with tabs[5]:
                 st.subheader('YTD On Time Compliance')
                 st.table(compliance_pivot)
 
-            # Add Line Chart for Compliance Trend (using the last day of each month for data points)
+            # Aggregate data by month for the trend
             trend_data = ytd_df.groupby(['Scheduled Date', 'Compliance']).size().unstack(fill_value=0).reset_index()
             trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
-            trend_data['Scheduled Date'] = pd.to_datetime(trend_data['Scheduled Date'])
-            
+
+            # Extract month and year for grouping
+            trend_data['Month'] = trend_data['Scheduled Date'].dt.to_period('M')
+
+            # Group by month to calculate average counts for each compliance category
+            monthly_avg = trend_data.groupby('Month').mean(numeric_only=True).reset_index()
+            monthly_avg['Month'] = monthly_avg['Month'].dt.to_timestamp()
+
+            # Round values for displaying in text
+            monthly_avg['On Time Rounded'] = monthly_avg['On Time'].round()
+            monthly_avg['Late + No Show'] = monthly_avg.get('Late', 0) + monthly_avg.get('No Show', 0)
+            monthly_avg['Late + No Show Rounded'] = monthly_avg['Late + No Show'].round()
 
             # Create line chart
             fig = go.Figure()
 
             # Add 'On Time' line to the chart
-            if 'On Time' in trend_data.columns:
+            if 'On Time' in monthly_avg.columns:
                 fig.add_trace(go.Scatter(
-                    x=trend_data['Scheduled Date'], 
-                    y=trend_data['On Time'], 
-                    mode='lines+markers',
+                    x=monthly_avg['Month'], 
+                    y=monthly_avg['On Time'], 
+                    mode='lines+markers+text',
                     name='On Time',
-                    line=dict(color='green')
+                    line=dict(color='green'),
+                    text=monthly_avg['On Time Rounded'],
+                    textposition='top center'
                 ))
 
-            # Add 'Late' line to the chart
-            if 'Late' in trend_data.columns:
+            # Add 'Late + No Show' line to the chart
+            if 'Late' in monthly_avg.columns or 'No Show' in monthly_avg.columns:
                 fig.add_trace(go.Scatter(
-                    x=trend_data['Scheduled Date'], 
-                    y=trend_data['Late'], 
-                    mode='lines+markers',
-                    name='Late',
-                    line=dict(color='red')
+                    x=monthly_avg['Month'], 
+                    y=monthly_avg['Late + No Show'], 
+                    mode='lines+markers+text',
+                    name='Late + No Show',
+                    line=dict(color='red'),
+                    text=monthly_avg['Late + No Show Rounded'],
+                    textposition='top center'
                 ))
 
             fig.update_layout(
-                title='Compliance Trend Over the Year',
-                xaxis_title='Scheduled Date',
-                yaxis_title='Number of Shipments',
+                title='Average Compliance Trend Per Month',
+                xaxis_title='Month',
+                yaxis_title='Average Number of Shipments',
                 xaxis=dict(type='category'),
                 template='plotly_white'
             )
