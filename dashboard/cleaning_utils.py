@@ -2,34 +2,33 @@ import pandas as pd
 import numpy as np
 
 def clean_open_dock(od_df):
-    # Clean the 'Reference Number' field
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].astype(str).str.strip()
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.replace(r'<[^>]*>', '', regex=True)  # Remove HTML tags
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.replace(r'\n', ',', regex=True)
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.replace(r'\s+', ',', regex=True)
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.replace(r'[^0-9,]', '', regex=True)
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.replace(r',,', ',', regex=True)
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.rstrip(',')
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].str.lstrip(',')
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].astype(str).str.strip()
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.replace(r'<[^>]*>', '', regex=True)  # Remove HTML tags
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.replace(r'\n', ',', regex=True)
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.replace(r'\s+', ',', regex=True)
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.replace(r'[^0-9,]', '', regex=True)
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.replace(r',,', ',', regex=True)
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.rstrip(',')
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].str.lstrip(',')
 
     # Remove any rows that are Inbounds
     if 'Direction' in od_df.columns:
         od_df = od_df[od_df['Direction'] != 'Inbound']
 
-    # Remove rows with missing Reference Numbers
-    od_df.loc[:, 'Reference Number'] = od_df['Reference Number'].replace('', np.nan)
-    od_df = od_df.dropna(subset=['Reference Number'])
+    # Remove rows with missing Sales Order(s)s
+    od_df.loc[:, 'Sales Order(s)'] = od_df['Sales Order(s)'].replace('', np.nan)
+    od_df = od_df.dropna(subset=['Sales Order(s)'])
 
     # Remove rows that are not 'Completed' or 'NoShow'
     if 'Status' in od_df.columns:
         od_df = od_df[~od_df['Status'].isin(['Arrived,', 'Cancelled', 'InProgress', 'Scheduled'])]
 
     # Keep required columns
-    columns_to_keep = ['Dwell Time (mins)', 'Reference Number', 'Status']
+    columns_to_keep = ['Dwell Time (mins)', 'Sales Order(s)', 'Status']
     od_df = od_df[[col for col in columns_to_keep if col in od_df.columns]]
 
     # Renaming columns to match SQL query
-    od_df.rename(columns={'Dwell Time (mins)': 'Dwell Time', 'Reference Number': 'SO Number'}, inplace=True)
+    od_df.rename(columns={'Dwell Time (mins)': 'Dwell Time', 'Sales Order(s)': 'SO Number'}, inplace=True)
 
     # Filling NaNs and converting 'Dwell Time' to hours
     if 'Dwell Time' in od_df.columns:
