@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title('Dwell Time and Compliance Dashboard')
-st.markdown('_Alpha V. 2.0.0')
+st.markdown('_Alpha V. 3.0.1')
 
 tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
 
