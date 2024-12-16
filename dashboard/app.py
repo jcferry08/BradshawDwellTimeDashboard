@@ -17,6 +17,28 @@ st.markdown('_Alpha V. 2.0.0')
 
 tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
 
+# Dwell Time Calculation Function
+def dwell_time(row):
+    loaded_datetime = row['Loaded DateTime']
+    checkin_datetime = row['Checkin DateTime']
+    appt_datetime = row['Appointment DateTime']
+    comp = row['Compliance']
+
+    if pd.notna(loaded_datetime):
+        if comp == 'On Time':
+            dwell_time = round((loaded_datetime - appt_datetime).total_seconds() / 3600, 2)
+        elif comp == 'Late':
+            dwell_time = round((loaded_datetime - checkin_datetime).total_seconds() / 3600, 2)
+        else:
+            dwell_time = None
+    else:
+        dwell_time = None
+
+    if dwell_time is not None and dwell_time <= 0:
+        dwell_time = np.nan
+
+    return dwell_time
+
 # Define the dwell_and_ontime_compliance dataframe using session state
 if 'dwell_and_ontime_compliance' not in st.session_state:
     st.session_state['dwell_and_ontime_compliance'] = pd.DataFrame()
@@ -63,7 +85,7 @@ with tabs[0]:
                     open_dock."Dwell Time" AS "Dwell Time",
                     open_dock."Status" AS "Event Status",
                     open_order."SO Number" AS "Order SO Number",
-                    open_order."Appt DateTime" AS "Appt DateTime",
+                    open_order."Appt DateTime" AS "Appointment DateTime",
                     open_order."Shipment ID" AS "Shipment ID"
                 FROM open_dock
                 LEFT JOIN open_order
@@ -72,7 +94,7 @@ with tabs[0]:
 
             # Remove unnecessary columns
             if not merged_df.empty:
-                columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Event Status', 'Appt DateTime', 'Shipment ID']
+                columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Event Status', 'Appointment DateTime', 'Shipment ID']
                 merged_df = merged_df[columns_to_keep]
                 merged_df.rename(columns={'Dock SO Number': 'SO Number'}, inplace=True)
                 merged_df['SO Number'] = merged_df['SO Number'].astype('object')
@@ -86,7 +108,7 @@ with tabs[0]:
                 SELECT 
                     trailer_report."Shipment ID",
                     merged_df."SO Number",
-                    merged_df."Appt DateTime",
+                    merged_df."Appointment DateTime",
                     trailer_report."Required Time",
                     trailer_report."Checkin DateTime",
                     trailer_report."Checkout DateTime",
@@ -107,7 +129,7 @@ with tabs[0]:
             # Remove unnecessary columns
             if not dwell_and_ontime_compliance.empty:
                 columns_to_keep = [
-                    'Shipment ID', 'SO Number', 'Appt DateTime', 'Required Time',
+                    'Shipment ID', 'SO Number', 'Appointment DateTime', 'Required Time',
                     'Checkin DateTime', 'Checkout DateTime', 'Carrier', 'Visit Type',
                     'Loaded DateTime', 'Compliance', 'Dwell Time', 'Event Status', 
                     'Scheduled Date', 'Week', 'Month'
@@ -131,6 +153,15 @@ with tabs[0]:
                 # Replace empty strings in 'Shipment ID' with NaN and drop rows with NaN in 'Shipment ID'
                 dwell_and_ontime_compliance['Shipment ID'].replace('', np.nan, inplace=True)
                 dwell_and_ontime_compliance.dropna(subset=['Shipment ID'], inplace=True)
+
+                # Calculate dwell time using the provided function
+                dwell_and_ontime_compliance['Calculated Dwell Time'] = dwell_and_ontime_compliance.apply(dwell_time, axis=1)
+
+                # Compare the calculated dwell time with the existing dwell time
+                dwell_and_ontime_compliance['Dwell Time'] = dwell_and_ontime_compliance[['Dwell Time', 'Calculated Dwell Time']].min(axis=1)
+
+                # Drop intermediate column if not needed
+                dwell_and_ontime_compliance.drop(columns=['Calculated Dwell Time'], inplace=True)
 
                 # Store in session state
                 st.session_state['dwell_and_ontime_compliance'] = dwell_and_ontime_compliance
