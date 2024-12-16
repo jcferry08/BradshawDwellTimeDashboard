@@ -145,7 +145,7 @@ with tabs[0]:
 
                 # Filter out specified carriers
                 carriers_to_exclude = [
-                    'AMZX', 'DIMES', 'EXLA', 'SAIA', 'FXFE', 'FXLA', 'FXNL', 'F106', 'F107',
+                    'AACT', 'DIMS', 'EXLA', 'SAIA', 'FXFE', 'FXLA', 'FXNL', 'F106', 'F107',
                     'F109', 'F110', 'F111', 'F112', 'F117', 'ODFL', 'U743', 'U746', 'U748', 'VQXX', 'CTII'
                 ]
                 dwell_and_ontime_compliance = dwell_and_ontime_compliance[~dwell_and_ontime_compliance['Carrier'].isin(carriers_to_exclude)]
