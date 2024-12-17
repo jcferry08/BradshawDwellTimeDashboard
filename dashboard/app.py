@@ -242,6 +242,7 @@ with tabs[2]:
                 comparison_columns = {
                     'Appointment DateTime': 'Appointment DateTime',
                     'Shipment ID': 'Shipment ID',
+                    'Carrier':'Carrier',
                     'Checkin DateTime': 'Manhattan Checkin DateTime',
                     'Checkout DateTime': 'Manhattan Checkout DateTime',
                     'Dock Checkin DateTime': 'Dock Checkin DateTime',
