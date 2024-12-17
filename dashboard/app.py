@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title('Dwell Time and Compliance Dashboard')
-st.markdown('_Alpha V. 3.0.4')
+st.markdown('_Alpha V. 3.1.1')
 
 tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
 
@@ -70,20 +70,34 @@ with tabs[0]:
             cleaned_open_order = clean_open_order(oo_df)
             cleaned_trailer_activity = clean_trailer_activity(ta_df)
 
+            print("Cleaned Open Dock Columns:", cleaned_open_dock.columns)
+            print(cleaned_open_dock.head())
+
             # Create a DuckDB connection
             con = duckdb.connect(":memory:")
+
+            # Drop existing tables and recreate them
+            con.execute("DROP TABLE IF EXISTS open_dock")
+            con.execute("DROP TABLE IF EXISTS open_order")
+            con.execute("DROP TABLE IF EXISTS trailer_report")
 
             # Creating tables for DuckDB from cleaned DataFrames
             con.execute("CREATE TABLE open_dock AS SELECT * FROM cleaned_open_dock")
             con.execute("CREATE TABLE open_order AS SELECT * FROM cleaned_open_order")
             con.execute("CREATE TABLE trailer_report AS SELECT * FROM cleaned_trailer_activity")
 
-            # First merge
+            # Verify table creation
+            print("DuckDB Table Schema - open_dock:")
+            print(con.execute("DESCRIBE open_dock").fetchall())
+
+            # First Merge Query
             merged_df = con.execute("""
                 SELECT
-                    open_dock."SO Number" AS "Dock SO Number",
+                    open_dock."SO Number" AS "SO Number",
                     open_dock."Dwell Time" AS "Dwell Time",
                     open_dock."Status" AS "Event Status",
+                    open_dock."Dock Checkin DateTime",
+                    open_dock."Dock Checkout DateTime",
                     open_order."SO Number" AS "Order SO Number",
                     open_order."Appt DateTime" AS "Appointment DateTime",
                     open_order."Shipment ID" AS "Shipment ID"
@@ -92,18 +106,9 @@ with tabs[0]:
                 ON open_order."SO Number" = open_dock."SO Number"
             """).fetchdf()
 
-            # Remove unnecessary columns
-            if not merged_df.empty:
-                columns_to_keep = ['Dock SO Number', 'Dwell Time', 'Event Status', 'Appointment DateTime', 'Shipment ID']
-                merged_df = merged_df[columns_to_keep]
-                merged_df.rename(columns={'Dock SO Number': 'SO Number'}, inplace=True)
-                merged_df['SO Number'] = merged_df['SO Number'].astype('object')
+            print("Merged DF Columns:", merged_df.columns)
 
-            # Standardizing 'Shipment ID' column for the second merge
-            merged_df['Shipment ID'] = merged_df['Shipment ID'].astype(str).str.strip()
-            cleaned_trailer_activity['Shipment ID'] = cleaned_trailer_activity['Shipment ID'].astype(str).str.strip()
-
-            # Second merge
+            # Second Merge Query
             dwell_and_ontime_compliance = con.execute("""
                 SELECT 
                     trailer_report."Shipment ID",
@@ -112,6 +117,8 @@ with tabs[0]:
                     trailer_report."Required Time",
                     trailer_report."Checkin DateTime",
                     trailer_report."Checkout DateTime",
+                    merged_df."Dock Checkin DateTime",
+                    merged_df."Dock Checkout DateTime",
                     trailer_report.Carrier,
                     trailer_report."Visit Type",
                     trailer_report."Loaded DateTime",
@@ -130,9 +137,9 @@ with tabs[0]:
             if not dwell_and_ontime_compliance.empty:
                 columns_to_keep = [
                     'Shipment ID', 'SO Number', 'Appointment DateTime', 'Required Time',
-                    'Checkin DateTime', 'Checkout DateTime', 'Carrier', 'Visit Type',
-                    'Loaded DateTime', 'Compliance', 'Dwell Time', 'Event Status', 
-                    'Scheduled Date', 'Week', 'Month'
+                    'Checkin DateTime', 'Checkout DateTime', 'Dock Checkin DateTime', 
+                    'Dock Checkout DateTime', 'Carrier', 'Visit Type', 'Loaded DateTime', 
+                    'Compliance', 'Dwell Time', 'Event Status', 'Scheduled Date', 'Week', 'Month'
                 ]
                 dwell_and_ontime_compliance = dwell_and_ontime_compliance[columns_to_keep]
 
@@ -220,12 +227,36 @@ with tabs[2]:
         st.write(f"Selected date for filtering: {selected_date_str}")
 
         if 'Scheduled Date' in st.session_state['dwell_and_ontime_compliance'].columns:
-            filtered_df = st.session_state['dwell_and_ontime_compliance'][st.session_state['dwell_and_ontime_compliance']['Scheduled Date'] == selected_date_str]
+            # Filter data for selected date
+            filtered_df = st.session_state['dwell_and_ontime_compliance'][
+                st.session_state['dwell_and_ontime_compliance']['Scheduled Date'] == selected_date_str
+            ]
 
             if filtered_df.empty:
                 st.warning(f"No data found for the selected date: {selected_date_str}")
             else:
-                # Creating layout for the graphs
+                # Step 1: Add Manhattan Dwell Time Column
+                filtered_df['Manhattan Dwell Time'] = filtered_df.apply(dwell_time, axis=1)
+
+                # Step 2: Create CSV Time Comparison Table
+                comparison_columns = {
+                    'Appointment DateTime': 'Appointment DateTime',
+                    'Shipment ID': 'Shipment ID',
+                    'Checkin DateTime': 'Manhattan Checkin DateTime',
+                    'Checkout DateTime': 'Manhattan Checkout DateTime',
+                    'Dock Checkin DateTime': 'Dock Checkin DateTime',
+                    'Dock Checkout DateTime': 'Dock Checkout DateTime',
+                    'Dwell Time': 'Dock Dwell Time',
+                    'Manhattan Dwell Time': 'Manhattan Dwell Time'
+                }
+                comparison_table = filtered_df[list(comparison_columns.keys())].rename(columns=comparison_columns)
+
+                # Step 3: Display the table in an expandable section
+                with st.expander("CSV Time Comparison"):
+                    st.write("Compare timestamps and dwell times between Manhattan and Dock data:")
+                    st.table(comparison_table)
+
+                # Existing layout for graphs
                 col1, col2 = st.columns([1, 1])
 
                 # On Time Compliance by Date (left column)

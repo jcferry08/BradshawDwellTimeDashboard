@@ -23,8 +23,31 @@ def clean_open_dock(od_df):
     if 'Status' in od_df.columns:
         od_df = od_df[~od_df['Status'].isin(['Arrived,', 'Cancelled', 'InProgress', 'Scheduled'])]
 
+    # Clean Arrival Time and Departure Time to remove ' - EST'
+    if 'Arrival Time' in od_df.columns:
+        od_df['Arrival Time'] = od_df['Arrival Time'].str.replace(r'\s-\s[A-Z]+', '', regex=True)
+
+    if 'Departure Time' in od_df.columns:
+        od_df['Departure Time'] = od_df['Departure Time'].str.replace(r'\s-\s[A-Z]+', '', regex=True)
+
+    # Combine Arrival Date and Time into Dock Checkin DateTime
+    if 'Arrival Date' in od_df.columns and 'Arrival Time' in od_df.columns:
+        od_df['Dock Checkin DateTime'] = pd.to_datetime(
+            od_df['Arrival Date'].fillna('') + ' ' + od_df['Arrival Time'].fillna(''),
+            format='%m/%d/%Y %I:%M %p', errors='coerce'
+        )
+
+    # Combine Departure Date and Time into Dock Checkout DateTime
+    if 'Departure Date' in od_df.columns and 'Departure Time' in od_df.columns:
+        od_df['Dock Checkout DateTime'] = pd.to_datetime(
+            od_df['Departure Date'].fillna('') + ' ' + od_df['Departure Time'].fillna(''),
+            format='%m/%d/%Y %I:%M %p', errors='coerce'
+        )
+
+
+
     # Keep required columns
-    columns_to_keep = ['Dwell Time (mins)', 'Sales Order(s)', 'Status']
+    columns_to_keep = ['Dwell Time (mins)', 'Sales Order(s)', 'Status', 'Dock Checkin DateTime', 'Dock Checkout DateTime']
     od_df = od_df[[col for col in columns_to_keep if col in od_df.columns]]
 
     # Renaming columns to match SQL query
