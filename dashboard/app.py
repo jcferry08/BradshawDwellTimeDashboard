@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title('Dwell Time and Compliance Dashboard')
-st.markdown('_Alpha V. 3.1.1')
+st.markdown('_Alpha V. 3.1.2')
 
 tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
 
@@ -35,6 +35,27 @@ def dwell_time(row):
         dwell_time = None
 
     if dwell_time is not None and dwell_time <= 0:
+        dwell_time = np.nan
+
+    return dwell_time
+
+def manhattan_dwell_time(row):
+    loaded_datetime = row['Loaded DateTime']
+    checkin_datetime = row['Checkin DateTime']  # Manhattan Checkin DateTime
+    appt_datetime = row['Appointment DateTime']  # Appointment DateTime
+    comp = row['Compliance']
+
+    if pd.notna(loaded_datetime):  # If Loaded DateTime is not null
+        if comp == 'On Time':  # On Time: Loaded - Appointment
+            dwell_time = round((loaded_datetime - appt_datetime).total_seconds() / 3600, 2)
+        elif comp == 'Late':  # Late: Loaded - Manhattan Checkin
+            dwell_time = round((loaded_datetime - checkin_datetime).total_seconds() / 3600, 2)
+        else:
+            dwell_time = None
+    else:
+        dwell_time = None
+
+    if dwell_time is not None and dwell_time <= 0:  # Remove invalid negative or zero dwell times
         dwell_time = np.nan
 
     return dwell_time
@@ -236,7 +257,7 @@ with tabs[2]:
                 st.warning(f"No data found for the selected date: {selected_date_str}")
             else:
                 # Step 1: Add Manhattan Dwell Time Column
-                filtered_df['Manhattan Dwell Time'] = filtered_df.apply(dwell_time, axis=1)
+                filtered_df['Manhattan Dwell Time'] = filtered_df.apply(manhattan_dwell_time, axis=1)
 
                 # Step 2: Create CSV Time Comparison Table
                 comparison_columns = {
@@ -247,8 +268,10 @@ with tabs[2]:
                     'Checkout DateTime': 'Manhattan Checkout DateTime',
                     'Dock Checkin DateTime': 'Dock Checkin DateTime',
                     'Dock Checkout DateTime': 'Dock Checkout DateTime',
+                    'Loaded DateTime': 'Loaded DateTime',
                     'Dwell Time': 'Dock Dwell Time',
-                    'Manhattan Dwell Time': 'Manhattan Dwell Time'
+                    'Manhattan Dwell Time': 'Manhattan Dwell Time',
+                    'Compliance': 'Compliance'
                 }
                 comparison_table = filtered_df[list(comparison_columns.keys())].rename(columns=comparison_columns)
 
