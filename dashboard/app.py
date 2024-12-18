@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title('Dwell Time and Compliance Dashboard')
-st.markdown('_Alpha V. 3.1.2')
+st.markdown('_Alpha V. 3.1.3')
 
 tabs = st.tabs(["Data Upload", "Cleaned Data", "Daily Dashboard", "Weekly Dashboard", "Monthly Dashboard", "YTD Dashboard"])
 
@@ -55,10 +55,7 @@ def manhattan_dwell_time(row):
     else:
         dwell_time = None
 
-    if dwell_time is not None and dwell_time <= 0:  # Remove invalid negative or zero dwell times
-        dwell_time = np.nan
-
-    return dwell_time
+    return dwell_time  # Allow negative values without replacing them
 
 # Define the dwell_and_ontime_compliance dataframe using session state
 if 'dwell_and_ontime_compliance' not in st.session_state:
